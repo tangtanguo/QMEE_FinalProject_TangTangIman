@@ -1,0 +1,214 @@
+---
+title: "QMEEProject_MomPupInteractions_StatsAnalyses"
+author: "Tang Tang & Iman"
+date: "2026-03-13"
+output: html_document
+---
+
+## Library
+```{r include = FALSE}
+
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(patchwork)
+
+library(lme4)
+library(glmmTMB)
+library(DHARMa)
+library(splines)
+library(ggeffects)
+
+```
+
+```{r}
+
+MomPupBehav <- readRDS("MomPupInteractionBehav_CumulativeDataset.rds")
+summary(MomPupBehav)
+
+```
+
+## Mom/Pup InitiatioN
+
+### DataFrame
+```{r}
+
+MomPupInitiation_behavs <- c("MOM INITIATION", "PUP INITIATION")
+
+MomPupInitiation <- MomPupBehav %>% 
+  filter(Behaviour %in% MomPupInitiation_behavs) %>% 
+  select(-Duration_s, -Stop_s, -Start_s, -BehaviourType, -Subject)
+
+```
+
+```{r warning = FALSE}
+
+MomPupInitiation_model_00 <- glm(
+  Behaviour ~ Condition * PND,
+  data = MomPupInitiation, 
+  family = binomial(link = "logit"))
+
+MomPupInitiation_model_01 <- glmer(
+  Behaviour ~ Condition * PND +
+    (1|MomID/PupID),
+  data = MomPupInitiation, 
+  family = binomial(link = "logit"))
+
+MomPupInitiation_model_02 <- glmer(
+  Behaviour ~ Condition * PND +
+    (1+PND|MomID) + (1|MomID/PupID),
+  data = MomPupInitiation, 
+  family = binomial(link = "logit")) ### ding ding ding
+
+anova(MomPupInitiation_model_01, MomPupInitiation_model_02)
+
+plot(simulateResiduals(MomPupInitiation_model_02))
+
+
+summary(MomPupInitiation_model_02)
+
+```
+
+```{r}
+
+PredData <- ggpredict(
+  MomPupInitiation_model_02,
+  terms = c("PND", "Condition")
+)
+
+
+ggplot(PredData,
+       aes(x = x,
+           y = predicted,
+           color = group,
+           group = group)) +
+  geom_line(size = 1) +
+  geom_point() +
+  geom_ribbon(aes(ymin = conf.low,
+                  ymax = conf.high,
+                  fill = group),
+              alpha = 0.2,
+              color = NA) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(
+    x = "Age in Days (PND)",
+    y = "Predicted Probability of Mom Initiation",
+    color = "Condition",
+    fill = "Condition"
+  ) +
+  theme_classic()
+```
+
+
+
+## Unsuccessful AND Successful Attachments
+
+### Dataframe for Unsuccessful Attachments
+```{r}
+
+AttachmentFreq_behavs <- c("UNSUCCESSFUL ATTACHMENT", "SUCCESSFUL ATTACHMENT")
+
+Success_Unsuccess <- MomPupBehav %>% 
+  filter(Behaviour %in% AttachmentFreq_behavs) %>% 
+  group_by(Behaviour, MomID, Rater, Condition, PND, ObservationID, PupID) %>%
+  summarise(
+    freq = sum(!is.na(Start_s)),
+    .groups = "drop"
+  )
+
+
+Success_Unsuccess_Wide <- Success_Unsuccess %>%
+  pivot_wider(
+    names_from = Behaviour,
+    values_from = freq,
+    values_fill = NA) %>% 
+  mutate(total = `SUCCESSFUL ATTACHMENT` + `UNSUCCESSFUL ATTACHMENT`,
+         prop_success = `SUCCESSFUL ATTACHMENT`/total)
+
+
+Success_Unsuccess_Wide2 <- Success_Unsuccess_Wide %>%
+  mutate(
+    `SUCCESSFUL ATTACHMENT`   = tidyr::replace_na(`SUCCESSFUL ATTACHMENT`, 0),
+    `UNSUCCESSFUL ATTACHMENT` = tidyr::replace_na(`UNSUCCESSFUL ATTACHMENT`, 0),
+    total = `SUCCESSFUL ATTACHMENT` + `UNSUCCESSFUL ATTACHMENT`
+  ) %>%
+  filter(total > 0)
+
+```
+
+```{r}
+
+PropSuccessModel_00 <- glm(
+  cbind(`SUCCESSFUL ATTACHMENT`,
+        `UNSUCCESSFUL ATTACHMENT`) ~ Condition * PND,
+    data = Success_Unsuccess_Wide2,
+  family = binomial(link = "logit"))
+
+PropSuccessModel_01 <- glmer(
+  cbind(`SUCCESSFUL ATTACHMENT`,
+        `UNSUCCESSFUL ATTACHMENT`) ~ Condition * PND +
+    (1|PupID),
+    data = Success_Unsuccess_Wide2,
+  family = binomial(link = "logit"))
+
+PropSuccessModel_02 <- glmer(
+  cbind(`SUCCESSFUL ATTACHMENT`,
+        `UNSUCCESSFUL ATTACHMENT`) ~ Condition * PND +
+    (1+PND|PupID),
+    data = Success_Unsuccess_Wide2,
+  family = binomial(link = "logit")) # i feel like it should be this one
+
+
+anova(PropSuccessModel_01, PropSuccessModel_02)
+
+plot(simulateResiduals(PropSuccessModel_02)) 
+performance::check_model(PropSuccessModel_02)
+
+summary(PropSuccessModel_02)
+
+```
+
+
+## Mom Acceptance/Resistance
+
+### Dataframe
+```{r}
+
+Resist_Accept_behavs <- c("ACCEPTANCE", "RESISTANCE")
+
+Accept_Resist <- MomPupBehav %>% 
+  filter(Behaviour %in% Resist_Accept_behavs) %>% 
+  select(-Duration_s, -Stop_s, -Start_s, -BehaviourType, -Subject)
+
+```
+
+### Diagnostics
+```{r warning = FALSE}
+
+AcceptanceResistance_model_00 <- glm(
+  Behaviour ~ Condition * PND,
+  data = Accept_Resist, 
+  family = binomial(link = "logit")) 
+
+AcceptanceResistance_model_01 <- glmer(
+  Behaviour ~ Condition * PND +
+    (1|MomID) + (1|Rater),
+  data = Accept_Resist, 
+  family = binomial(link = "logit")) 
+
+AcceptanceResistance_model_02 <- glmer( # ding ding ding!!
+  Behaviour ~ Condition * PND +
+    (1+PND|MomID) +
+    (1|Rater),  data = Accept_Resist, 
+  family = binomial(link = "logit"))
+# rater scores should not change with PND, i don't think 1+PND|Rater would be the correct random effect
+
+anova(AcceptanceResistance_model_02, AcceptanceResistance_model_01)
+
+performance::check_model(AcceptanceResistance_model_01)
+plot(simulateResiduals(AcceptanceResistance_model_01))
+
+summary(AcceptanceResistance_model_02)
+
+```
