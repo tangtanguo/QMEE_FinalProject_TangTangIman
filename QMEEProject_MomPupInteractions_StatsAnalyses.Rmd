@@ -19,6 +19,8 @@ library(glmmTMB)
 library(DHARMa)
 library(splines)
 library(ggeffects)
+library(MASS)
+
 
 ```
 
@@ -29,7 +31,7 @@ summary(MomPupBehav)
 
 ```
 
-## Mom/Pup InitiatioN
+## Mom/Pup Initiation (done?)
 
 ### DataFrame
 ```{r}
@@ -38,7 +40,7 @@ MomPupInitiation_behavs <- c("MOM INITIATION", "PUP INITIATION")
 
 MomPupInitiation <- MomPupBehav %>% 
   filter(Behaviour %in% MomPupInitiation_behavs) %>% 
-  select(-Duration_s, -Stop_s, -Start_s, -BehaviourType, -Subject)
+  dplyr::select(-Duration_s, -Stop_s, -Start_s, -BehaviourType, -Subject)
 
 ```
 
@@ -57,48 +59,27 @@ MomPupInitiation_model_01 <- glmer(
 
 MomPupInitiation_model_02 <- glmer(
   Behaviour ~ Condition * PND +
-    (1+PND|MomID) + (1|MomID/PupID),
+    (1+PND|MomID) + (1|PupID),
   data = MomPupInitiation, 
-  family = binomial(link = "logit")) ### ding ding ding
+  family = binomial(link = "logit")) 
 
-anova(MomPupInitiation_model_01, MomPupInitiation_model_02)
+MomPupInitiation_model_03 <- glmer(
+  Behaviour ~ Condition * PND +
+    (1+PND|MomID) + (1+Condition|PupID),
+  data = MomPupInitiation, 
+  family = binomial(link = "logit")) # ding ?
 
+anova(MomPupInitiation_model_03, MomPupInitiation_model_02)
+
+plot(simulateResiduals(MomPupInitiation_model_03))
 plot(simulateResiduals(MomPupInitiation_model_02))
+
 
 
 summary(MomPupInitiation_model_02)
 
 ```
 
-```{r}
-
-PredData <- ggpredict(
-  MomPupInitiation_model_02,
-  terms = c("PND", "Condition")
-)
-
-
-ggplot(PredData,
-       aes(x = x,
-           y = predicted,
-           color = group,
-           group = group)) +
-  geom_line(size = 1) +
-  geom_point() +
-  geom_ribbon(aes(ymin = conf.low,
-                  ymax = conf.high,
-                  fill = group),
-              alpha = 0.2,
-              color = NA) +
-  scale_y_continuous(limits = c(0,1)) +
-  labs(
-    x = "Age in Days (PND)",
-    y = "Predicted Probability of Mom Initiation",
-    color = "Condition",
-    fill = "Condition"
-  ) +
-  theme_classic()
-```
 
 
 
@@ -155,7 +136,7 @@ PropSuccessModel_01 <- glmer(
 PropSuccessModel_02 <- glmer(
   cbind(`SUCCESSFUL ATTACHMENT`,
         `UNSUCCESSFUL ATTACHMENT`) ~ Condition * PND +
-    (1+PND|PupID),
+    (1+Condition|PupID),
     data = Success_Unsuccess_Wide2,
   family = binomial(link = "logit")) # i feel like it should be this one
 
@@ -170,7 +151,7 @@ summary(PropSuccessModel_02)
 ```
 
 
-## Mom Acceptance/Resistance
+## Mom Acceptance/Resistance (done? me thinks)
 
 ### Dataframe
 ```{r}
@@ -179,7 +160,7 @@ Resist_Accept_behavs <- c("ACCEPTANCE", "RESISTANCE")
 
 Accept_Resist <- MomPupBehav %>% 
   filter(Behaviour %in% Resist_Accept_behavs) %>% 
-  select(-Duration_s, -Stop_s, -Start_s, -BehaviourType, -Subject)
+  dplyr::select(-Duration_s, -Stop_s, -Start_s, -BehaviourType, -Subject)
 
 ```
 
@@ -191,24 +172,173 @@ AcceptanceResistance_model_00 <- glm(
   data = Accept_Resist, 
   family = binomial(link = "logit")) 
 
-AcceptanceResistance_model_01 <- glmer(
-  Behaviour ~ Condition * PND +
-    (1|MomID) + (1|Rater),
-  data = Accept_Resist, 
-  family = binomial(link = "logit")) 
-
-AcceptanceResistance_model_02 <- glmer( # ding ding ding!!
+AcceptanceResistance_model_01 <- glmer( 
   Behaviour ~ Condition * PND +
     (1+PND|MomID) +
+    (1 | PupID) +
     (1|Rater),  data = Accept_Resist, 
   family = binomial(link = "logit"))
-# rater scores should not change with PND, i don't think 1+PND|Rater would be the correct random effect
+
+AcceptanceResistance_model_02 <- glmer( 
+  Behaviour ~ Condition * PND +
+    (1+PND|MomID) +
+    (1 + Condition | PupID) +
+    (1|Rater),  data = Accept_Resist, 
+  family = binomial(link = "logit"))
 
 anova(AcceptanceResistance_model_02, AcceptanceResistance_model_01)
 
-performance::check_model(AcceptanceResistance_model_01)
+performance::check_model(AcceptanceResistance_model_02)
+plot(simulateResiduals(AcceptanceResistance_model_00))
 plot(simulateResiduals(AcceptanceResistance_model_01))
+plot(simulateResiduals(AcceptanceResistance_model_02))
 
 summary(AcceptanceResistance_model_02)
 
+# 1+Pup:Condition? naur
+
 ```
+
+
+
+## Guidance 
+
+### Dataframe
+```{r}
+
+Guidance <- MomPupBehav %>%
+  filter(Behaviour == "GUIDANCE")
+
+Guidance2 <- Guidance %>%
+  group_by(MomID, Rater, Condition, PND, ObservationID, PupID) %>%
+  summarise(
+    freq = sum(!is.na(Start_s)),
+    dur  = sum(Duration_s, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+```
+
+```{r}
+
+# frequency 
+
+GuidanceModel_00 <- glm(
+  freq ~ Condition * PND,
+    data = Guidance2,
+  family = quasipoisson(link = "log"))
+
+GuidanceModel_01 <- glmmTMB(
+  freq ~ Condition * PND,
+    data = Guidance2,
+  family = nbinom2)
+
+GuidanceModel_02 <- glmmTMB(
+  freq ~ Condition * PND +
+    (1+PND|MomID) +
+    (1+Condition|PupID),
+    data = Guidance2,
+  family = nbinom2) ## use this one? for now
+
+GuidanceModel_03 <- glm.nb(
+  freq ~ Condition * PND,
+    data = Guidance2)
+
+GuidanceModel_04 <- glmer.nb(
+  freq ~ Condition * PND +
+    (1+PND|MomID) +
+    (1+Condition|PupID),
+    data = Guidance2)
+
+
+plot(GuidanceModel_00)
+plot(simulateResiduals(GuidanceModel_00))
+performance::check_model(GuidanceModel_00)
+
+plot(simulateResiduals(GuidanceModel_01))
+plot(simulateResiduals(GuidanceModel_02))
+plot(simulateResiduals(GuidanceModel_03))
+
+
+anova(GuidanceModel_01, GuidanceModel_02)
+
+
+```
+
+```{r}
+
+GuidanceDurModel_00 <- glm(
+  dur ~ Condition * PND,
+    data = Guidance2,
+  family = Gamma)
+
+GuidanceDurModel_00 <- glmmTMB(
+  dur ~ Condition * PND,
+    data = Guidance2,
+  family = gamma(link="log"))
+
+
+
+
+GuidanceDur_binom <- glmer(
+  dur > 0 ~ Condition * PND +
+    (1+PND | MomID) +
+    (1+Condition | PupID),
+  family = binomial(link = "logit"),
+  data = Guidance2)
+
+plot(simulateResiduals(GuidanceDur_binom))
+
+  
+  GuidanceDuration_pos <- Guidance2 %>%
+  filter(dur > 0)
+
+GuidanceDur_gamma <- glmmTMB(
+  dur ~ Condition * PND +
+    (1+PND | MomID) +
+    (1+Condition | PupID) +
+    (1|Rater),
+  family = Gamma(link = "log"),
+  data = GuidanceDuration_pos
+)
+
+plot(simulateResiduals(GuidanceDur_gamma, group = GuidanceDuration_pos$PND))
+
+plot(simulateResiduals(GuidanceDur_gamma, val = "zero"))
+# perfor
+
+
+```
+
+
+
+## First Contact:
+
+### Dataframe
+```{r}
+
+FirstTouch <- MomPupBehav %>% 
+  filter(Behaviour == "FIRST TOUCH") %>% 
+  select(MomID, PupID, Behaviour, PND, ObservationID, Condition, Rater)
+
+
+
+
+Accept_Resist <- MomPupBehav %>% 
+  filter(Behaviour %in% Resist_Accept_behavs) %>% 
+  select(-Duration_s, -Stop_s, -Start_s, -BehaviourType, -Subject)
+
+
+%>% 
+  select(-Stop_s, -Start_s, -BehaviourType, -Subject)
+
+
+
+  group_by(Behaviour, MomID, Rater, Condition, PND, ObservationID, PupID) %>%
+  summarise(
+    freq = sum(!is.na(Duration_s)),
+    .groups = "drop")
+
+```
+
