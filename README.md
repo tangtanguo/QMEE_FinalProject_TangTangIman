@@ -10,3 +10,5 @@ Prediction: Moms will invest less in parental care over time, therefore they wil
 
 How do parental care behaviours change across conditions over pup development? 
 Predictions: Sibling competition will occur in the presence of siblings, and mom may show preference for one pup over the other.Therefore, moms will invest less time into each pup individually by guiding each pup less, nursing each pup for shorter durations, and taking longer to attach pups when interacting with two pups instead of one.
+
+## JD: Is it possible to think of more interesting predictions? Obviously Mom has finite resources…
