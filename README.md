@@ -26,9 +26,9 @@ If there is sibling competition, then in the presence of a sibling, we predict t
 ## TTG: Are these research questions and predictions framed better?
 
 
-PRESENTATION 
+PRESENTATION:
 We presented during the "early" timeslot on Tuesday March 31. You can find our QMEE presentation attached as a PDF named "PO-Conflict&SibComp_QMEEPresentation.pdf"
 
-FINAL WRITE-UP
+FINAL WRITE-UP:
 work in progress :D
 
