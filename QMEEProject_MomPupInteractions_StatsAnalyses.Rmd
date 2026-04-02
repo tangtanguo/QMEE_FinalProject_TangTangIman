@@ -198,7 +198,7 @@ Success_Unsuccess_Wide2 <- Success_Unsuccess_Wide %>%
 
 ```{r}
 
-PropSuccessModel_00 <- glm(
+PropSuccessModel_00 <- glmmTMB(
   cbind(`SUCCESSFUL ATTACHMENT`,
         `UNSUCCESSFUL ATTACHMENT`) ~ Condition * PND,
     data = Success_Unsuccess_Wide2,
@@ -377,7 +377,7 @@ Guidance2 <- Guidance %>%
 
 # frequency 
 
-GuidanceModel_00 <- glm(
+GuidanceModel_00 <- glmmTMB(
   freq ~ Condition * PND,
     data = Guidance2,
   family = nbinom2)
